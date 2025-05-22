@@ -1,0 +1,72 @@
+{
+    "name": "MaIS-lookup",
+
+    "namespace": "Stanford\\MaISlookup",
+
+    "description": "TODO",
+
+    "documentation": "README.md",
+
+    "framework-version": 16,
+
+    "authors": [
+        {
+            "name": "Ihab Zeedia",
+            "email": "ihab.zeedia@stanford.edu",
+            "institution": "Stanford Health Care"
+        },
+        {
+            "name": "Jordan Schultz",
+            "email": "jmschult@stanford.edu",
+            "institution": "Stanford Health Care"
+        }
+    ],
+
+    "permissions": [
+
+    ],
+
+    "enable-every-page-hooks-on-system-pages": false,
+
+    "enable-ajax-logging": false,
+
+    "auth-ajax-actions": [
+        "TestAction"
+    ],
+
+    "no-auth-ajax-actions": [
+        "TestAction"
+    ],
+
+    "links": {
+        "project": [
+
+        ],
+        "control-center": [
+
+        ]
+    },
+
+    "no-auth-pages": [
+
+    ],
+
+    "project-settings": [
+
+    ],
+
+    "system-settings": [
+
+    ],
+
+    "crons": [
+
+    ],
+
+    "compatibility": {
+        "php-version-min": "",
+        "php-version-max": "",
+        "redcap-version-min": "",
+        "redcap-version-max": ""
+    }
+}
