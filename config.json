@@ -22,10 +22,6 @@
         }
     ],
 
-    "permissions": [
-
-    ],
-
     "enable-every-page-hooks-on-system-pages": false,
 
     "enable-ajax-logging": false,
@@ -40,7 +36,12 @@
 
     "links": {
         "project": [
-
+            {
+                "name": "MAIS API test page",
+                "icon": "fas fa-check-circle",
+                "url": "pages/test_api.php",
+                "show-header-and-footer": true
+            }
         ],
         "control-center": [
 
@@ -52,7 +53,34 @@
     ],
 
     "project-settings": [
-
+        {
+            "key": "ehs-environment",
+            "name": "<b>Select Current Environment:</b>",
+            "required": true,
+            "type": "dropdown",
+            "choices": [
+                {
+                    "name": "UAT",
+                    "value": "UAT"
+                },
+                {
+                    "name": "Production",
+                    "value": "PROD"
+                }
+            ]
+        },
+        {
+            "key": "google-project-id",
+            "name": "<b>Google Project Id</b><br>specif Google project Id where MIAS secret are saved. ",
+            "required": true,
+            "type": "text"
+        },
+        {
+            "key": "google-service-account-json-key",
+            "name": "<b>Google Secret Manager Service Account JSON Key contents</b><br>Copy and paste the entire contents (as JSON text) of the key file, e.g. som-rit-phi-study-name-xyz123.json",
+            "required": true,
+            "type": "textarea"
+        }
     ],
 
     "system-settings": [

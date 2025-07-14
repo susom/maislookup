@@ -1,45 +1,69 @@
 <?php
+
+
 namespace Stanford\MaISlookup;
 
+require_once 'vendor/autoload.php';
+require_once 'classes/GoogleSecretManager.php';
+require_once 'classes/CertificateManager.php';
+require_once 'classes/MAISClient.php';
+require_once 'classes/Utilities.php';
+namespace Stanford\MaISlookup;
+
+use phpseclib3\Crypt\EC\Formats\Keys\XML;
+
 class MaISlookup extends \ExternalModules\AbstractExternalModule {
+    private $secretManager;
+    private $certManager;
+    private $maisClient;
+
     public function __construct() {
         parent::__construct();
-        // Other code to run when object is instantiated
+
+    }
+    private function getEnv(): string {
+        return $this->getProjectSetting('ehs-environment') ?: 'UAT';
     }
 
-    public function injectJSMO($data = null, $init_method = null) {
-        echo $this->initializeJavascriptModuleObject();
-        $cmds = [
-            "const module = " . $this-getJavascriptModuleObjectName();
-        ];
-        if (!empty($data)) $cmds[] = "module.data = " . json_encode($data);
-        if (!empty($init_method)) $cmds[] = "module.afterRender(module." . $init_method . ")";
-        ?>
-        <script>
-            <script src="<?=$this->getUrl("assets/jsmo.js",true)?>"></script>
-            $(function() { <?php echo implode(";\n", $cmds) ?> })
-        </script>
-        <?php
+    private function getKeyJson(): ?string {
+        return $this->getProjectSetting('google-service-account-json-key') ?: null;
     }
 
-    public function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance,
-        $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
-    {
-        switch($action) {
-            case "TestAction":
-                \REDCap::logEvent("Test Action Received");
-                $result = [
-                    "success"=>true,
-                    "user_id"=>$user_id
-                ];
-                break;
-            default:
-                // Action not defined
-                throw new Exception ("Action $action is not defined");
+    private function getSecretManager(): GoogleSecretManager {
+        if (!$this->secretManager) {
+            $this->secretManager = new GoogleSecretManager(
+                $this->getProjectSetting('google-project-id'),
+                $this->getKeyJson()
+            );
         }
-
-        // Return is left as php object, is converted to json automatically
-        return $result;
+        return $this->secretManager;
     }
+
+    private function getCertManager(): CertificateManager {
+        if (!$this->certManager) {
+            $this->certManager = new CertificateManager($this->getSecretManager(), $this->getEnv());
+        }
+        return $this->certManager;
+    }
+
+    private function getMAISClient(): MAISClient {
+        if (!$this->maisClient) {
+            $url = $this->getEnv() === 'PROD' ? 'https://registry.stanford.edu' : 'https://registry-uat.stanford.edu';
+            $this->maisClient = new MAISClient($url, $this->getCertManager());
+        }
+        return $this->maisClient;
+    }
+
+    public function get($uri): string {
+        try {
+            $content = $this->getMAISClient()->get($uri);
+        } catch (\Exception $e) {
+            echo "API call failed: " . $e->getMessage();
+        } finally {
+            $this->getCertManager()->cleanup();
+        }
+        return $content;
+    }
+
 
 }
