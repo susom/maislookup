@@ -167,13 +167,19 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
      */
     public function printPaths(array $data, string $path = ''): void
     {
+        if ($path === '') {
+            echo '<ul>' . PHP_EOL;
+        }
         foreach ($data as $key => $value) {
             $currentPath = $path . '[' . $key . ']';
             if (is_array($value)) {
                 $this->printPaths($value, $currentPath);
             } else {
-                echo $currentPath . ' -> ' . $value . PHP_EOL;
+                echo '<li><strong>' . $currentPath . '</strong> -> ' . $value . '</li>' . PHP_EOL;
             }
+        }
+        if ($path === '') {
+            echo '</ul>' . PHP_EOL;
         }
     }
 }
