@@ -1,14 +1,9 @@
 {
     "name": "MaIS-lookup",
-
     "namespace": "Stanford\\MaISlookup",
-
     "description": "TODO",
-
     "documentation": "README.md",
-
     "framework-version": 16,
-
     "authors": [
         {
             "name": "Ihab Zeedia",
@@ -21,37 +16,25 @@
             "institution": "Stanford Health Care"
         }
     ],
-
     "enable-every-page-hooks-on-system-pages": false,
-
     "enable-ajax-logging": false,
-
     "auth-ajax-actions": [
-        "TestAction"
+        "lookupUser"
     ],
-
-    "no-auth-ajax-actions": [
-        "TestAction"
-    ],
-
     "links": {
         "project": [
             {
-                "name": "MAIS API test page",
+                "name": "MAIS Mapping Helper Page",
                 "icon": "fas fa-check-circle",
-                "url": "pages/test_api.php",
+                "url": "pages/mapping_helper.php",
                 "show-header-and-footer": true
             }
         ],
         "control-center": [
-
         ]
     },
-
     "no-auth-pages": [
-
     ],
-
     "project-settings": [
         {
             "key": "ehs-environment",
@@ -76,21 +59,43 @@
             "type": "text"
         },
         {
+            "key": "sunetid-field",
+            "name": "<b>SUNETid Field:</b><br>select the field which will trigger API call to get Person Information from MAIS API. ",
+            "required": true,
+            "type": "field-list"
+        },
+        {
+            "key": "attribute_instance",
+            "name": "<b>Attribute Instance Map</b>",
+            "required": true,
+            "type": "sub_settings",
+            "repeatable": true,
+            "sub_settings": [
+                {
+                    "key": "mais-api-attribute",
+                    "name": "<b>Select MAIS Attribute</b>",
+                    "required": true,
+                    "type": "text"
+                },
+                {
+                    "key": "redcap-field",
+                    "name": "<b>Select Project field where to save the OneDirectory Attribute<br>",
+                    "required": true,
+                    "type": "field-list"
+                }
+            ]
+        }
+    ],
+    "system-settings": [
+        {
             "key": "google-service-account-json-key",
             "name": "<b>Google Secret Manager Service Account JSON Key contents</b><br>Copy and paste the entire contents (as JSON text) of the key file, e.g. som-rit-phi-study-name-xyz123.json",
             "required": true,
             "type": "textarea"
         }
     ],
-
-    "system-settings": [
-
-    ],
-
     "crons": [
-
     ],
-
     "compatibility": {
         "php-version-min": "",
         "php-version-max": "",
