@@ -113,7 +113,15 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
         try{
             $sunetId = $payload['sunetId'];
             $data = [];
-            $data[$sunetId]['affiliation'] = $this->getUserData($sunetId, "affiliation");
+            # if user has one affiliation put it in the array to match the structure of the other user.
+            $affiliation = $this->getUserData($sunetId, "affiliation");
+            if(!isset($affiliation['affiliation'][0])) {
+                $temp = $affiliation['affiliation'];
+                unset($affiliation['affiliation']);
+                $affiliation['affiliation'][] = $temp;
+
+            }
+            $data[$sunetId]['affiliation'] = $affiliation;
             $data[$sunetId]['biodemo'] = $this->getUserData($sunetId, "biodemo");
             $data['success'] = true;
             return $data;
