@@ -46,6 +46,8 @@
                 // Show loader
                 const loader = document.getElementById('ajax-loader');
                 if (loader) loader.style.display = 'block';
+                // reset form if populated
+                module.mapUserAttributes(0, true);
 
                 module.ajax('lookupUser', {'sunetId': sunetId})
                     .then(function (response) {
@@ -110,7 +112,7 @@
                     });
             }
         },
-        mapUserAttributes: function (index) {
+        mapUserAttributes: function (index, reset = false) {
 
             for (const key in module.mappedAttributes) {
                 let maisAttribute = module.mappedAttributes[key];
@@ -119,8 +121,12 @@
                 if (maisAttribute.includes('#')) {
                     maisAttribute = maisAttribute.replace('#', index);
                 }
+                var value = '';
+                // If reset is true, we want to clear the value
+                if(!reset){
+                    value = module.getValueFromPath(module.user, maisAttribute);
+                }
 
-                const value = module.getValueFromPath(module.user, maisAttribute);
                 // console.log(maisAttribute + "=>", value);
                 // if input exists in the DOM, set its value
                 var e = document.querySelector('[name="' + key + '"]');
