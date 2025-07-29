@@ -19,8 +19,6 @@ try{
     ));
     echo '</pre>';
 }
-catch (GuzzleException $e) {
-
-}catch (\Exception $e) {
-
+catch (\Exception $e) {
+    echo "<div class='alert alert-danger'>".$e->getMessage()."</div> ";
 }

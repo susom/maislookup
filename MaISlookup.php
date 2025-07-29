@@ -126,7 +126,7 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
             $data['success'] = true;
             return $data;
         }catch (\Exception $e) {
-            return ['success' => false, 'message' => 'Error fetching user data: ' . $e->getMessage()];
+            throw new \Exception( "API call failed: " . $e->getMessage());
         }
     }
 
