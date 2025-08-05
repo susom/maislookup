@@ -126,8 +126,8 @@
                 let maisAttribute = module.mappedAttributes[key];
 
                 // Replace '#' with index
-                if (maisAttribute.includes('#')) {
-                    maisAttribute = maisAttribute.replace('#', index);
+                if (maisAttribute.includes('[#]')) {
+                    maisAttribute = maisAttribute.replace('[#]', '[' + index + ']');
                 }
                 var value = '';
                 // If reset is true, we want to clear the value
