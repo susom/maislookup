@@ -67,6 +67,10 @@
                                 const type = aff['@attributes']?.type || 'N/A';
                                 const effective = aff['@attributes']?.effective || 'N/A';
                                 const department = aff['department']?.['#text'] || 'N/A';
+                                const telephone = response[sunetId]?.telephone['telephone'][pointer] || 'N/A';
+                                const name = response[sunetId]?.name['name'][pointer] || 'N/A';
+                                const email = response[sunetId]?.email['email']['#text'] || 'N/A';
+                                const birthday = response[sunetId]?.biodemo['biodemo']['birthdate'] || 'N/A';
 
                                 content += `
                                         <div class="row mb-2 align-items-center">
@@ -74,6 +78,10 @@
                                                 <input type="radio" name="affiliation" value="${value}" />
                                             </div>
                                             <div class="col-10">
+                                                <div><strong>Name:</strong> ${name['#text']}</div>
+                                                <div><strong>Telephone:</strong> ${telephone['#text']}</div>
+                                                <div><strong>Email:</strong> ${email}</div>
+                                                <div><strong>Birthday:</strong> ${birthday}</div>
                                                 <div><strong>Affiliation:</strong> ${text}</div>
                                                 <div><strong>Type:</strong> ${type}</div>
                                                 <div><strong>Effective Date:</strong> ${effective}</div>

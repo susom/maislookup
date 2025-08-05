@@ -123,6 +123,9 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
             }
             $data[$sunetId]['affiliation'] = $affiliation;
             $data[$sunetId]['biodemo'] = $this->getUserData($sunetId, "biodemo");
+            $data[$sunetId]['telephone'] = $this->getUserData($sunetId, "telephone");
+            $data[$sunetId]['email'] = $this->getUserData($sunetId, "email");
+            $data[$sunetId]['name'] = $this->getUserData($sunetId, "name");
             $data['success'] = true;
             return $data;
         }catch (\Exception $e) {

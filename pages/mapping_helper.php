@@ -15,7 +15,10 @@ try{
     echo '<pre>';
     $module->printPaths(array(
         'affiliation' => $array[$sunetId]['affiliation'],
-        'biodemo' => $array[$sunetId]['biodemo']
+        'biodemo' => $array[$sunetId]['biodemo'],
+        'telephone' => $array[$sunetId]['telephone'],
+        'email' => $array[$sunetId]['email'],
+        'name' => $array[$sunetId]['name'],
     ));
     echo '</pre>';
 }
