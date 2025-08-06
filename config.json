@@ -1,7 +1,7 @@
 {
     "name": "MaIS-lookup",
     "namespace": "Stanford\\MaISlookup",
-    "description": "TODO",
+    "description": "EM to lookup Person Information from the MAIS API.",
     "documentation": "README.md",
     "framework-version": 16,
     "authors": [
@@ -90,7 +90,7 @@
         {
             "key": "google-service-account-json-key",
             "name": "<b>Google Secret Manager Service Account JSON Key contents</b><br>Copy and paste the entire contents (as JSON text) of the key file, e.g. som-rit-phi-study-name-xyz123.json",
-            "required": true,
+            "required": false,
             "type": "textarea"
         }
     ],
