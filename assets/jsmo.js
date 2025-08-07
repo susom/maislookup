@@ -8,6 +8,8 @@
         user: {},
         sunetId: '',
         mappedAttributes: {},
+        su_value: '',
+        record_id: '',
         init: function (callback, errorCallback) {
             let e = document.querySelector('[name="' + module.sunetId + '"]');
 
@@ -34,20 +36,44 @@
             document.body.addEventListener('input', function (e) {
                 if (e.target.name === 'affiliation') {
                     console.log('Input changed:', e.target.value);
-                    module.mapUserAttributes(e.target.value);
+                    module.saveUser(e.target.value);
                 }
             });
+        },
+        saveUser: function (index, callback, errorCallback) {
+            console.log('Index:', index);
+            console.log('Saving user with Sunet ID:', this.su_value);
+            module.ajax('saveUser', {'sunetId': this.su_value, 'index': index, 'record_id': this.record_id})
+                .then(function (response) {
+                        if (response?.success) {
+                            for (const key in response?.data) {
+                                var e = document.querySelector('[name="' + key + '"]');
+                                if (e !== undefined) {
+                                    e.value = response?.data[key] || '';
+                                }
+                                // close the dialog
+                                $("#dialog").dialog("close");
+                            }
+                        }
+                })
+                .catch(function (err) {
+                    // Hide loader
+                    if (loader) loader.style.display = 'none';
+
+                    if (typeof errorCallback === 'function') {
+                        errorCallback(err);
+                    } else {
+                        console.error("Error", err);
+                    }
+                });
         },
         lookupUser: function (sunetId, callback, errorCallback) {
 
             if (sunetId || sunetId.trim() !== '') {
-
-
+                this.su_value = sunetId;
                 // Show loader
                 const loader = document.getElementById('ajax-loader');
                 if (loader) loader.style.display = 'block';
-                // reset form if populated
-                module.mapUserAttributes(0, true);
 
                 module.ajax('lookupUser', {'sunetId': sunetId})
                     .then(function (response) {
@@ -57,20 +83,14 @@
                             module.user = response[sunetId] || {};
 
 
-                            const affiliations = response[sunetId]?.affiliation?.affiliation || [];
-
                             var pointer = 0;
-                            for (const aff of affiliations) {
+                            for (const aff of response[sunetId]) {
 
-                                const text = aff['#text'] || '';
+                                const text = aff['affiliation'] || '';
                                 const value = pointer;
-                                const type = aff['@attributes']?.type || 'N/A';
-                                const effective = aff['@attributes']?.effective || 'N/A';
-                                const department = aff['department']?.['#text'] || 'N/A';
-                                const telephone = response[sunetId]?.telephone['telephone'][pointer] || 'N/A';
-                                const name = response[sunetId]?.name['name'][pointer] || 'N/A';
-                                const email = response[sunetId]?.email['email']['#text'] || 'N/A';
-                                const birthday = response[sunetId]?.biodemo['biodemo']['birthdate'] || 'N/A';
+                                const type = aff['type'] || 'N/A';
+                                const department = aff['department'] || 'N/A';
+                                const name = aff['name'] || 'N/A';
 
                                 content += `
                                         <div class="row mb-2 align-items-center">
@@ -78,13 +98,9 @@
                                                 <input type="radio" name="affiliation" value="${value}" />
                                             </div>
                                             <div class="col-10">
-                                                <div><strong>Name:</strong> ${name['#text']}</div>
-                                                <div><strong>Telephone:</strong> ${telephone['#text']}</div>
-                                                <div><strong>Email:</strong> ${email}</div>
-                                                <div><strong>Birthday:</strong> ${birthday}</div>
+                                                <div><strong>Name:</strong> ${name}</div>
                                                 <div><strong>Affiliation:</strong> ${text}</div>
                                                 <div><strong>Type:</strong> ${type}</div>
-                                                <div><strong>Effective Date:</strong> ${effective}</div>
                                                 <div><strong>Department:</strong> ${department}</div>
                                             </div>
                                         </div>
@@ -119,31 +135,6 @@
                         }
                     });
             }
-        },
-        mapUserAttributes: function (index, reset = false) {
-
-            for (const key in module.mappedAttributes) {
-                let maisAttribute = module.mappedAttributes[key];
-
-                // Replace '#' with index
-                if (maisAttribute.includes('[#]')) {
-                    maisAttribute = maisAttribute.replace('[#]', '[' + index + ']');
-                }
-                var value = '';
-                // If reset is true, we want to clear the value
-                if(!reset){
-                    value = module.getValueFromPath(module.user, maisAttribute);
-                }
-
-                // console.log(maisAttribute + "=>", value);
-                // if input exists in the DOM, set its value
-                var e = document.querySelector('[name="' + key + '"]');
-                if (e !== undefined) {
-                    e.value = value || '';
-                }
-            }
-            // close the dialog
-            $("#dialog").dialog("close");
         },
         getValueFromPath: function (obj, path) {
             if (!path) return undefined;

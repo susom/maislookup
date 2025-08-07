@@ -56,6 +56,7 @@ $this->injectJSMO();
         jsmoObject = ExternalModules.Stanford.MaISlookup;
         jsmoObject.sunetId = "<?php echo $this->getProjectSetting('sunetid-field') ?>"
         jsmoObject.mappedAttributes = <?php echo json_encode($this->getMappedAttributes()) ?>;
+        jsmoObject.record_id = "<?php echo $this->record ?>";
         jsmoObject.init()
     });
 </script>
