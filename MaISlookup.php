@@ -91,6 +91,14 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
         }
     }
 
+    public function redcap_data_entry_form_top(  $project_id,  $record,  $instrument,  $event_id,  $group_id = NULL,  $repeat_instance = 1 )
+    {
+        if($this->getProjectSetting('sunetid-field') !== '') {
+            $this->record = $record;
+            $this->includeFile('pages/mais_lookup.php');
+        }
+    }
+
     public function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance,
                                        $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
     {
