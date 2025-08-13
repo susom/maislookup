@@ -9,7 +9,7 @@ use GuzzleHttp\Promise\Utils;
 
 
 try{
-    $sunetId = 'ihabz';
+    $sunetId = USERID;
     echo '<h2>MAIS Lookup Results for ' . $sunetId . '</h2>';
     echo '<p>Copy the path to the value you want. Replace the first number with #</p>';
     echo '<pre>';
