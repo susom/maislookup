@@ -54,6 +54,8 @@
                                 // close the dialog
                                 $("#dialog").dialog("close");
                             }
+                        }else{
+                            alert('Error: ' + (response?.message || 'Failed to save user data.'));
                         }
                 })
                 .catch(function (err) {
