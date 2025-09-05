@@ -86,6 +86,15 @@
 
 
                             var pointer = 0;
+                            // Add header text once if there are any affiliations
+                            if (response[sunetId].length > 0) {
+                                content += `
+                                    <div class="mb-3 fw-bold text-center">
+                                        Please select one of the following affiliations:
+                                    </div>
+                                `;
+                            }
+
                             for (const aff of response[sunetId]) {
 
                                 const text = aff['affiliation'] || '';
@@ -123,7 +132,18 @@
                         $("#dialog").dialog({
                             title: 'MaIS Lookup for ' + sunetId,
                             width: 600,
-                            modal: true
+                            modal: true,
+                            open: function () {
+                                // Replace the default close icon with a big "×"
+                                $(this).parent().find(".ui-dialog-titlebar-close")
+                                    .html("&#10005;") // Unicode × symbol
+                                    .css({
+                                        "font-size": "12px",
+                                        "font-weight": "bold",
+                                        "color": "#333",
+                                        "text-align": "center"
+                                    });
+                            }
                         }).dialog("open");
                     })
                     .catch(function (err) {

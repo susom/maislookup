@@ -46,7 +46,6 @@ $this->injectJSMO();
 </style>
 <div id="ajax-loader"  style="display: none;" class="custom-loader"></div>
 <div id="dialog" title="Basic dialog">
-
     <div class="container">
         <div id="dialog-body"></div>
     </div>
