@@ -4,6 +4,76 @@
     // Define the jsmo in IIFE so we can reference object in our new function methods
     const module = ExternalModules.Stanford.MaISlookup;
 
+    // ---- Custom vanilla modal helpers (iOS-Safari friendly) ----
+    function maisGetModal() {
+        return document.getElementById('mais-modal');
+    }
+    function maisOpenModal(title) {
+        const modal = maisGetModal();
+        if (!modal) {
+            console.warn('[MaIS] Modal element #mais-modal not found in DOM.');
+            return;
+        }
+        // Move to <body> in case the page wrapper has overflow/transform that traps fixed positioning
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        const titleEl = document.getElementById('mais-modal-title');
+        if (titleEl && typeof title === 'string') titleEl.textContent = title;
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('mais-modal-open');
+        console.log('[MaIS] Modal opened.');
+    }
+    function maisCloseModal() {
+        const modal = maisGetModal();
+        if (!modal) return;
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('mais-modal-open');
+        console.log('[MaIS] Modal closed.');
+    }
+    function maisSetBody(html) {
+        const body = document.getElementById('dialog-body');
+        if (body) body.innerHTML = html || '';
+    }
+    function maisShowLoader(show) {
+        const loader = document.getElementById('ajax-loader');
+        if (loader) loader.style.display = show ? 'block' : 'none';
+    }
+
+    // Wire close handlers exactly once on first init.
+    let maisInitialized = false;
+    function maisWireOnce() {
+        if (maisInitialized) return;
+        maisInitialized = true;
+
+        // Close on backdrop / × button click — delegated on document for iOS reliability
+        document.addEventListener('click', function (e) {
+            const t = e.target;
+            if (t && t.getAttribute && t.getAttribute('data-mais-close') === '1') {
+                maisCloseModal();
+            }
+        });
+
+        // Close on Escape (desktop convenience)
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') maisCloseModal();
+        });
+
+        // Affiliation radio selection — use `change` only (Safari-reliable on radios).
+        const modal = maisGetModal();
+        if (modal) {
+            modal.addEventListener('change', function (e) {
+                const target = e.target;
+                if (target && target.name === 'affiliation' && target.checked) {
+                    console.log('[MaIS] Affiliation selected:', target.value);
+                    module.saveUser(target.value);
+                }
+            });
+        }
+    }
+
     Object.assign(module, {
         user: {},
         sunetId: '',
@@ -11,113 +81,96 @@
         su_value: '',
         record_id: '',
         init: function (callback, errorCallback) {
-            let e = document.querySelector('[name="' + module.sunetId + '"]');
+            console.log('[MaIS] init() called. sunetId field:', module.sunetId);
+            maisWireOnce();
 
-            if (e) {
-                e.addEventListener("blur", function () {
-                    try {
-                        module.lookupUser(this.value);
-                    } catch (err) {
-                        if (errorCallback) errorCallback(err);
-                    }
-                });
-            } else {
+            const e = document.querySelector('[name="' + module.sunetId + '"]');
+            if (!e) {
+                console.warn('[MaIS] Sunet input field not found:', module.sunetId);
                 if (errorCallback) errorCallback(`Element with name="${module.sunetId}" not found`);
+                return;
             }
-            // Initialize the dialog once with all stable options.
-            // NOTE: The previous `show: { effect: "blind", duration: 500 }` option
-            // caused the dialog to "flash and disappear" on iOS Safari (the blind
-            // effect manipulates `clip`/wrapper styles that iOS often leaves in a
-            // hidden state). Removing it fixes the modal-not-showing bug on iPhone.
-            $("#dialog").dialog({
-                autoOpen: false,
-                modal: true,
-                width: 600,
-                appendTo: "body",
-                open: function () {
-                    // Replace the default close icon with a big "×"
-                    $(this).parent().find(".ui-dialog-titlebar-close")
-                        .html("&#10005;") // Unicode × symbol
-                        .css({
-                            "font-size": "12px",
-                            "font-weight": "bold",
-                            "color": "#333",
-                            "text-align": "center"
-                        });
-                }
-            });
 
-            // Listen for affiliation radio selection.
-            // NOTE: iOS Safari does not reliably fire the `input` event on radio
-            // inputs; use `change` (which is fired consistently across browsers)
-            // and also listen for `click` as a belt-and-suspenders fallback for
-            // older iOS versions where delegated `change` on radios can be flaky.
-            const onAffiliationPicked = function (e) {
-                if (e.target && e.target.name === 'affiliation' && e.target.checked) {
-                    console.log('Affiliation selected:', e.target.value);
-                    module.saveUser(e.target.value);
+            // Use BOTH `change` and `blur` to maximize reliability on iOS.
+            // Guard against duplicate triggering with a short debounce on the value.
+            let lastValue = '';
+            let lastFireAt = 0;
+            const triggerLookup = function (val, source) {
+                const v = (val || '').trim();
+                if (!v) return;
+                const now = Date.now();
+                if (v === lastValue && (now - lastFireAt) < 800) {
+                    console.log('[MaIS] Skipping duplicate lookup for:', v, 'source:', source);
+                    return;
+                }
+                lastValue = v;
+                lastFireAt = now;
+                console.log('[MaIS] Triggering lookup for:', v, 'source:', source);
+                try {
+                    module.lookupUser(v);
+                } catch (err) {
+                    console.error('[MaIS] lookupUser threw:', err);
+                    if (errorCallback) errorCallback(err);
                 }
             };
-            document.body.addEventListener('change', onAffiliationPicked);
-            document.body.addEventListener('click', onAffiliationPicked);
+
+            e.addEventListener('blur',   function () { triggerLookup(this.value, 'blur'); });
+            e.addEventListener('change', function () { triggerLookup(this.value, 'change'); });
         },
         saveUser: function (index, callback, errorCallback) {
-            console.log('Index:', index);
-            console.log('Saving user with Sunet ID:', this.su_value);
-            module.ajax('saveUser', {'sunetId': this.su_value, 'index': index, 'record_id': this.record_id})
+            console.log('[MaIS] saveUser index:', index, 'sunet:', this.su_value);
+            maisShowLoader(true);
+            module.ajax('saveUser', {
+                'sunetId': this.su_value,
+                'index': index,
+                'record_id': this.record_id
+            })
                 .then(function (response) {
-                        if (response?.success) {
-                            for (const key in response?.data) {
-                                var e = document.querySelector('[name="' + key + '"]');
-                                if (e !== undefined) {
-                                    e.value = response?.data[key] || '';
-                                }
-                                // close the dialog
-                                $("#dialog").dialog("close");
+                    maisShowLoader(false);
+                    if (response && response.success) {
+                        const data = response.data || {};
+                        for (const key in data) {
+                            const el = document.querySelector('[name="' + key + '"]');
+                            if (el) {
+                                el.value = data[key] || '';
+                                try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (ex) {}
                             }
-                        }else{
-                            alert('Error: ' + (response?.message || 'Failed to save user data.'));
                         }
+                        maisCloseModal();
+                    } else {
+                        alert('Error: ' + ((response && response.message) || 'Failed to save user data.'));
+                    }
                 })
                 .catch(function (err) {
-                    // Hide loader
-                    if (loader) loader.style.display = 'none';
-
-                    if (typeof errorCallback === 'function') {
-                        errorCallback(err);
-                    } else {
-                        console.error("Error", err);
-                    }
+                    maisShowLoader(false);
+                    console.error('[MaIS] saveUser error:', err);
+                    if (typeof errorCallback === 'function') errorCallback(err);
                 });
         },
         lookupUser: function (sunetId, callback, errorCallback) {
+            if (!sunetId || !sunetId.trim()) {
+                console.log('[MaIS] lookupUser called with empty sunetId; skipping.');
+                return;
+            }
+            this.su_value = sunetId.trim();
+            console.log('[MaIS] lookupUser ->', this.su_value);
+            maisShowLoader(true);
 
-            if (sunetId || sunetId.trim() !== '') {
-                this.su_value = sunetId;
-                // Show loader
-                const loader = document.getElementById('ajax-loader');
-                if (loader) loader.style.display = 'block';
+            module.ajax('lookupUser', { 'sunetId': this.su_value })
+                .then(function (response) {
+                    maisShowLoader(false);
+                    console.log('[MaIS] lookupUser response:', response);
 
-                module.ajax('lookupUser', {'sunetId': sunetId})
-                    .then(function (response) {
-                        let content = '';
-                        if (loader) loader.style.display = 'none';
-                        if (response?.success) {
-                            module.user = response[sunetId] || {};
+                    let content = '';
+                    if (response && response.success) {
+                        const list = response[sunetId];
+                        module.user = list || {};
 
+                        if (Array.isArray(list) && list.length > 0) {
+                            content += '<div class="mb-3 fw-bold text-center">Please select one of the following affiliations:</div>';
 
-                            var pointer = 0;
-                            // Add header text once if there are any affiliations
-                            if (response[sunetId].length > 0) {
-                                content += `
-                                    <div class="mb-3 fw-bold text-center">
-                                        Please select one of the following affiliations:
-                                    </div>
-                                `;
-                            }
-
-                            for (const aff of response[sunetId]) {
-
+                            let pointer = 0;
+                            for (const aff of list) {
                                 const text = aff['affiliation'] || '';
                                 const value = pointer;
                                 const type = aff['type'] || 'N/A';
@@ -125,51 +178,38 @@
                                 const name = aff['name'] || 'N/A';
 
                                 content += `
-                                        <div class="row mb-2 align-items-center">
-                                            <div class="col-1 d-flex justify-content-center">
-                                                <input type="radio" name="affiliation" value="${value}" />
-                                            </div>
-                                            <div class="col-10">
-                                                <div><strong>Name:</strong> ${name}</div>
-                                                <div><strong>Affiliation:</strong> ${text}</div>
-                                                <div><strong>Type:</strong> ${type}</div>
-                                                <div><strong>Department:</strong> ${department}</div>
-                                            </div>
+                                    <div class="row mb-2 align-items-center">
+                                        <div class="col-1 d-flex justify-content-center">
+                                            <input type="radio" name="affiliation" value="${value}" />
                                         </div>
-                                        <hr>
-                                    `;
+                                        <div class="col-10">
+                                            <div><strong>Name:</strong> ${name}</div>
+                                            <div><strong>Affiliation:</strong> ${text}</div>
+                                            <div><strong>Type:</strong> ${type}</div>
+                                            <div><strong>Department:</strong> ${department}</div>
+                                        </div>
+                                    </div>
+                                    <hr>
+                                `;
                                 pointer += 1;
                             }
-
-
-                            // Hide loader
-
-
                         } else {
-
-                            content = `<div class="alert alert-danger">Error: ${response['message'] || 'No data found for this Sunet ID.'}</div>`;
+                            content = '<div class="alert alert-warning">No affiliations found for this Sunet ID.</div>';
                         }
-                        $("#dialog-body").html(content);
-                        // Update only dynamic options and open. Do NOT re-call
-                        // `.dialog({...})` with a fresh option hash here — on iOS
-                        // re-initializing right before `open` was contributing to
-                        // the "flash then disappear" behavior.
-                        $("#dialog")
-                            .dialog("option", "title", 'MaIS Lookup for ' + sunetId)
-                            .dialog("open")
-                            .dialog("moveToTop");
-                    })
-                    .catch(function (err) {
-                        // Hide loader
-                        if (loader) loader.style.display = 'none';
+                    } else {
+                        content = `<div class="alert alert-danger">Error: ${(response && response.message) || 'No data found for this Sunet ID.'}</div>`;
+                    }
 
-                        if (typeof errorCallback === 'function') {
-                            errorCallback(err);
-                        } else {
-                            console.error("Error", err);
-                        }
-                    });
-            }
+                    maisSetBody(content);
+                    maisOpenModal('MaIS Lookup for ' + sunetId);
+                })
+                .catch(function (err) {
+                    maisShowLoader(false);
+                    console.error('[MaIS] lookupUser error:', err);
+                    maisSetBody('<div class="alert alert-danger">Lookup failed. Please try again.</div>');
+                    maisOpenModal('MaIS Lookup');
+                    if (typeof errorCallback === 'function') errorCallback(err);
+                });
         },
         getValueFromPath: function (obj, path) {
             if (!path) return undefined;
