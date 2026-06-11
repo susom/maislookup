@@ -24,21 +24,42 @@
             } else {
                 if (errorCallback) errorCallback(`Element with name="${module.sunetId}" not found`);
             }
+            // Initialize the dialog once with all stable options.
+            // NOTE: The previous `show: { effect: "blind", duration: 500 }` option
+            // caused the dialog to "flash and disappear" on iOS Safari (the blind
+            // effect manipulates `clip`/wrapper styles that iOS often leaves in a
+            // hidden state). Removing it fixes the modal-not-showing bug on iPhone.
             $("#dialog").dialog({
                 autoOpen: false,
-                show: {
-                    effect: "blind",
-                    duration: 500
-                },
-            });
-
-            // listen for a radio button click
-            document.body.addEventListener('input', function (e) {
-                if (e.target.name === 'affiliation') {
-                    console.log('Input changed:', e.target.value);
-                    module.saveUser(e.target.value);
+                modal: true,
+                width: 600,
+                appendTo: "body",
+                open: function () {
+                    // Replace the default close icon with a big "×"
+                    $(this).parent().find(".ui-dialog-titlebar-close")
+                        .html("&#10005;") // Unicode × symbol
+                        .css({
+                            "font-size": "12px",
+                            "font-weight": "bold",
+                            "color": "#333",
+                            "text-align": "center"
+                        });
                 }
             });
+
+            // Listen for affiliation radio selection.
+            // NOTE: iOS Safari does not reliably fire the `input` event on radio
+            // inputs; use `change` (which is fired consistently across browsers)
+            // and also listen for `click` as a belt-and-suspenders fallback for
+            // older iOS versions where delegated `change` on radios can be flaky.
+            const onAffiliationPicked = function (e) {
+                if (e.target && e.target.name === 'affiliation' && e.target.checked) {
+                    console.log('Affiliation selected:', e.target.value);
+                    module.saveUser(e.target.value);
+                }
+            };
+            document.body.addEventListener('change', onAffiliationPicked);
+            document.body.addEventListener('click', onAffiliationPicked);
         },
         saveUser: function (index, callback, errorCallback) {
             console.log('Index:', index);
@@ -129,22 +150,14 @@
                             content = `<div class="alert alert-danger">Error: ${response['message'] || 'No data found for this Sunet ID.'}</div>`;
                         }
                         $("#dialog-body").html(content);
-                        $("#dialog").dialog({
-                            title: 'MaIS Lookup for ' + sunetId,
-                            width: 600,
-                            modal: true,
-                            open: function () {
-                                // Replace the default close icon with a big "×"
-                                $(this).parent().find(".ui-dialog-titlebar-close")
-                                    .html("&#10005;") // Unicode × symbol
-                                    .css({
-                                        "font-size": "12px",
-                                        "font-weight": "bold",
-                                        "color": "#333",
-                                        "text-align": "center"
-                                    });
-                            }
-                        }).dialog("open");
+                        // Update only dynamic options and open. Do NOT re-call
+                        // `.dialog({...})` with a fresh option hash here — on iOS
+                        // re-initializing right before `open` was contributing to
+                        // the "flash then disappear" behavior.
+                        $("#dialog")
+                            .dialog("option", "title", 'MaIS Lookup for ' + sunetId)
+                            .dialog("open")
+                            .dialog("moveToTop");
                     })
                     .catch(function (err) {
                         // Hide loader
