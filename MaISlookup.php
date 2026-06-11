@@ -229,7 +229,7 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
     public function lookupUser($payload)
     {
         try {
-            $sunetId = $payload['sunetId'];
+            $sunetId = strtolower($payload['sunetId']);
             $data = [];
             $data[$sunetId] = $this->buildAffiliationModalArray($sunetId);
             $data['success'] = true;

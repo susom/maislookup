@@ -152,7 +152,11 @@
                 console.log('[MaIS] lookupUser called with empty sunetId; skipping.');
                 return;
             }
-            this.su_value = sunetId.trim();
+            // iOS Safari auto-capitalizes the first letter of text inputs. The MAIS API
+            // is case-sensitive (capitalized SUNet IDs return 404). Lowercase + trim here
+            // so we send, store, and read responses using a single canonical key.
+            sunetId = sunetId.trim().toLowerCase();
+            this.su_value = sunetId;
             console.log('[MaIS] lookupUser ->', this.su_value);
             maisShowLoader(true);
 
@@ -163,7 +167,17 @@
 
                     let content = '';
                     if (response && response.success) {
-                        const list = response[sunetId];
+                        // Be tolerant: prefer the canonical lowercase key, but fall back to
+                        // any non-`success` key so we still find the list if PHP keyed it differently.
+                        let list = response[sunetId];
+                        if (!list) {
+                            for (const k in response) {
+                                if (k !== 'success' && Array.isArray(response[k])) {
+                                    list = response[k];
+                                    break;
+                                }
+                            }
+                        }
                         module.user = list || {};
 
                         if (Array.isArray(list) && list.length > 0) {
@@ -206,6 +220,15 @@
                 .catch(function (err) {
                     maisShowLoader(false);
                     console.error('[MaIS] lookupUser error:', err);
+
+                    // Detect the very common "HTML returned instead of JSON" case
+                    // (server redirected to a login/WebAuth page -> response starts with '<').
+                    const isHtmlInsteadOfJson =
+                        err && (
+                            (err.name === 'SyntaxError' &&
+                                /Unrecognized token '<'|Unexpected token '?<'?|<!DOCTYPE|<html/i.test(String(err.message || ''))) ||
+                            /<!DOCTYPE|<html/i.test(String(err.message || ''))
+                        );
 
                     // Build a verbose, iPhone-visible error report (no console available on device)
                     let errDetails = '';
@@ -250,20 +273,68 @@
                             .replace(/>/g, '&gt;');
                     };
 
-                    const body =
-                        '<div class="alert alert-danger">' +
-                            '<div class="fw-bold mb-2">Lookup failed. Please try again.</div>' +
-                            '<div class="mb-2">UA: ' + escapeHtml(navigator.userAgent) + '</div>' +
-                            '<details open>' +
-                                '<summary>Error details (tap to copy)</summary>' +
-                                '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin-top:8px;">' +
-                                    escapeHtml(errDetails) +
-                                '</pre>' +
-                            '</details>' +
-                        '</div>';
+                    const headerMsg = isHtmlInsteadOfJson
+                        ? 'Your session has expired or the server returned a login page instead of data. ' +
+                          'Please refresh this survey page and try again. ' +
+                          'If this keeps happening on iPhone, try disabling "Prevent Cross-Site Tracking" in Settings → Safari, or use a different browser.'
+                        : 'Lookup failed. Please try again.';
 
-                    maisSetBody(body);
-                    maisOpenModal('MaIS Lookup');
+                    // Render an initial body immediately so the user sees something.
+                    const renderBody = function (extraDiagnostic) {
+                        const body =
+                            '<div class="alert alert-danger">' +
+                                '<div class="fw-bold mb-2">' + escapeHtml(headerMsg) + '</div>' +
+                                '<div class="mb-2" style="font-size:11px;color:#555;">UA: ' + escapeHtml(navigator.userAgent) + '</div>' +
+                                '<details' + (isHtmlInsteadOfJson ? '' : ' open') + '>' +
+                                    '<summary>Technical details</summary>' +
+                                    '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin-top:8px;">' +
+                                        escapeHtml(errDetails) +
+                                        (extraDiagnostic ? '\n\n--- Diagnostic probe ---\n' + escapeHtml(extraDiagnostic) : '') +
+                                    '</pre>' +
+                                '</details>' +
+                            '</div>';
+                        maisSetBody(body);
+                        maisOpenModal('MaIS Lookup');
+                    };
+
+                    renderBody('');
+
+                    // Diagnostic probe: re-hit the JSMO endpoint with raw fetch so we can capture
+                    // status code + first chunk of the HTML response and show it in the modal.
+                    try {
+                        const probeUrl = (module && module.url) ? module.url : null;
+                        if (probeUrl && typeof fetch === 'function') {
+                            const formData = new FormData();
+                            formData.append('action', 'lookupUser');
+                            formData.append('payload', JSON.stringify({ sunetId: sunetId }));
+                            fetch(probeUrl, {
+                                method: 'POST',
+                                credentials: 'include',
+                                body: formData
+                            })
+                            .then(function (resp) {
+                                const status = resp.status + ' ' + resp.statusText;
+                                const ct = resp.headers.get('content-type') || '';
+                                const finalUrl = resp.url || probeUrl;
+                                return resp.text().then(function (txt) {
+                                    const snippet = (txt || '').slice(0, 600);
+                                    const diag =
+                                        'probeUrl: ' + probeUrl + '\n' +
+                                        'finalUrl: ' + finalUrl + '\n' +
+                                        'status: ' + status + '\n' +
+                                        'content-type: ' + ct + '\n' +
+                                        'body[0..600]:\n' + snippet;
+                                    renderBody(diag);
+                                });
+                            })
+                            .catch(function (probeErr) {
+                                renderBody('probe fetch failed: ' + String(probeErr));
+                            });
+                        }
+                    } catch (probeEx) {
+                        // ignore — we already rendered the basic message
+                    }
+
                     if (typeof errorCallback === 'function') errorCallback(err);
                 });
         },
