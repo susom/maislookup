@@ -206,7 +206,63 @@
                 .catch(function (err) {
                     maisShowLoader(false);
                     console.error('[MaIS] lookupUser error:', err);
-                    maisSetBody('<div class="alert alert-danger">Lookup failed. Please try again.</div>');
+
+                    // Build a verbose, iPhone-visible error report (no console available on device)
+                    let errDetails = '';
+                    try {
+                        if (err == null) {
+                            errDetails = '(no error object)';
+                        } else if (typeof err === 'string') {
+                            errDetails = err;
+                        } else if (err instanceof Error) {
+                            errDetails =
+                                'name: ' + (err.name || '') + '\n' +
+                                'message: ' + (err.message || '') + '\n' +
+                                'stack: ' + (err.stack || '');
+                        } else {
+                            // Capture non-enumerable props too
+                            const seen = new WeakSet();
+                            errDetails = JSON.stringify(err, function (k, v) {
+                                if (typeof v === 'object' && v !== null) {
+                                    if (seen.has(v)) return '[Circular]';
+                                    seen.add(v);
+                                }
+                                return v;
+                            }, 2);
+                            if (!errDetails || errDetails === '{}') {
+                                // Fallback: pull common props
+                                errDetails =
+                                    'status: ' + (err.status || '') + '\n' +
+                                    'statusText: ' + (err.statusText || '') + '\n' +
+                                    'responseText: ' + (err.responseText || '') + '\n' +
+                                    'message: ' + (err.message || '') + '\n' +
+                                    'toString: ' + String(err);
+                            }
+                        }
+                    } catch (ex) {
+                        errDetails = 'Could not serialize error: ' + String(ex) + ' / raw: ' + String(err);
+                    }
+
+                    const escapeHtml = function (s) {
+                        return String(s)
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                    };
+
+                    const body =
+                        '<div class="alert alert-danger">' +
+                            '<div class="fw-bold mb-2">Lookup failed. Please try again.</div>' +
+                            '<div class="mb-2">UA: ' + escapeHtml(navigator.userAgent) + '</div>' +
+                            '<details open>' +
+                                '<summary>Error details (tap to copy)</summary>' +
+                                '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin-top:8px;">' +
+                                    escapeHtml(errDetails) +
+                                '</pre>' +
+                            '</details>' +
+                        '</div>';
+
+                    maisSetBody(body);
                     maisOpenModal('MaIS Lookup');
                     if (typeof errorCallback === 'function') errorCallback(err);
                 });
