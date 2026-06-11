@@ -285,7 +285,7 @@
                             '<div class="alert alert-danger">' +
                                 '<div class="fw-bold mb-2">' + escapeHtml(headerMsg) + '</div>' +
                                 '<div class="mb-2" style="font-size:11px;color:#555;">UA: ' + escapeHtml(navigator.userAgent) + '</div>' +
-                                '<details' + (isHtmlInsteadOfJson ? '' : ' open') + '>' +
+                                '<details open>' +
                                     '<summary>Technical details</summary>' +
                                     '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin-top:8px;">' +
                                         escapeHtml(errDetails) +
