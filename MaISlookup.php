@@ -319,14 +319,83 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
 
     public function injectJSMO($data = null, $init_method = null)
     {
+        // -------- FIX: Ensure a REDCap CSRF token exists in $_SESSION before the
+        // framework tries to build JSMO ajax settings. On some prod configurations
+        // (notably public survey pages on iOS), $_SESSION['redcap_csrf_token'] is
+        // not auto-populated for the request. The framework's getAjaxSettings()
+        // then calls initAjaxCrypto(false) which throws
+        // "A token must be specified for ajax encryption." The framework swallows
+        // the exception and returns []  ->  client-side ajaxSettings.endpoint is
+        // undefined  ->  fetch(undefined) resolves to the current page URL  ->
+        // returns the survey HTML  ->  JSON.parse fails with "Unrecognized token '<'".
+        try {
+            if (session_status() !== PHP_SESSION_ACTIVE) {
+                @session_start();
+            }
+            if (class_exists('\System')) {
+                $hasToken = method_exists('\System', 'getCsrfToken') ? \System::getCsrfToken() : false;
+                if ($hasToken === false && method_exists('\System', 'generateCsrfToken')) {
+                    \System::generateCsrfToken();
+                }
+            }
+        } catch (\Throwable $t) {
+            error_log('[MaIS injectJSMO] CSRF token bootstrap failed: ' . $t->getMessage());
+        }
+
+        // -------- Diagnostic: probe the framework's getAjaxSettings() ourselves so we
+        // can see WHY ajaxSettings.endpoint may be undefined client-side. The framework
+        // wraps that call in try/catch and silently sets $ajax_settings=[] on throw,
+        // which leads to fetch(undefined) -> fetches the current page (HTML) ->
+        // JSON.parse fails with "Unrecognized token '<'".
+        $jsmoDiag = ['ok' => false, 'reason' => 'not-attempted', 'keys' => [], 'endpointPresent' => false];
+        try {
+            $framework = method_exists($this, 'framework') ? $this->framework : null;
+            // The framework instance lives at $this->framework on v6+ JSMO-aware modules.
+            // getAjaxSettings is on the Framework class. If not reachable, fall back to reflection.
+            $settings = $this->getAjaxSettings();
+
+            if (is_array($settings)) {
+                $jsmoDiag['ok'] = true;
+                $jsmoDiag['reason'] = '';
+                $jsmoDiag['keys'] = array_keys($settings);
+                $jsmoDiag['endpointPresent'] = !empty($settings['endpoint']);
+                $jsmoDiag['endpoint'] = $settings['endpoint'] ?? null;
+            }
+        } catch (\Throwable $t) {
+            $jsmoDiag['ok'] = false;
+            $jsmoDiag['reason'] = get_class($t) . ': ' . $t->getMessage();
+            // Also write to error_log and REDCap log so admins can find it server-side.
+            $msg = '[MaIS injectJSMO] getAjaxSettings() threw: ' . $jsmoDiag['reason']
+                 . "\n" . $t->getTraceAsString();
+            error_log($msg);
+            try { \REDCap::logEvent('MaIS JSMO setup failure', $msg); } catch (\Throwable $_) {}
+        }
+
         echo $this->initializeJavascriptModuleObject();
         $cmds = [
             "const module = " . $this->getJavascriptModuleObjectName()
         ];
         if (!empty($data)) $cmds[] = "module.data = " . json_encode($data);
         if (!empty($init_method)) $cmds[] = "module.afterRender(module." . $init_method . ")";
+
+        // Cache-bust the JSMO script with the file mtime. iOS Safari aggressively
+        // caches /modules/<prefix>/assets/jsmo.js, and the framework's built-in
+        // versioning has not been strong enough for some users — append `&_v=<mtime>`
+        // (or `?_v=<mtime>` if the URL has no query string yet).
+        $jsmoPath = __DIR__ . '/assets/jsmo.js';
+        $jsmoVer  = @filemtime($jsmoPath) ?: time();
+        $jsmoUrl  = $this->getUrl('assets/jsmo.js', true);
+        $jsmoUrl .= (strpos($jsmoUrl, '?') === false ? '?' : '&') . '_v=' . $jsmoVer;
         ?>
-        <script src="<?=$this->getUrl("assets/jsmo.js", true)?>"></script>
+        <script src="<?=$jsmoUrl?>"></script>
+        <script>
+            // Boot marker so the in-modal diagnostic can confirm the latest jsmo.js loaded.
+            try { window.__maisJsmoVer = "<?=$jsmoVer?>"; } catch (e) {}
+            // Server-side probe of getAjaxSettings() so the in-modal diagnostic can show
+            // whether the framework built a valid endpoint. If `ok:false`, the message
+            // will identify the underlying PHP exception (e.g. crypto / verification).
+            try { window.__maisJsmoServerDiag = <?=json_encode($jsmoDiag)?>; } catch (e) {}
+        </script>
         <?php
     }
 
