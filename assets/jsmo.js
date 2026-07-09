@@ -15,7 +15,7 @@
     const maisAjaxSnapshot = { settings: null, action: null, payload: null };
     // Sentinel so we can prove (in the on-screen diagnostic) that the LATEST jsmo.js
     // actually ran on the device — if this stays falsy, the iPhone is using a cached copy.
-    window.__maisSpyBuild = '2026-06-11-net-spy-v5-path-prefix-fix';
+    window.__maisSpyBuild = '2026-07-09-net-spy-v6-versiondir-prefix-fix';
 
     // --- Pristine XMLHttpRequest from a same-origin iframe, so third-party wrappers
     // (e.g. Stanford WebAuth/analytics scripts that may rewrap XHR/fetch after us)
@@ -36,26 +36,28 @@
     }
 
     // --- Stanford WebAuth path-prefix fix ---
-    // Stanford prod serves REDCap behind a WebAuth proxy under e.g. "/webauth/...".
+    // Stanford prod can serve REDCap behind a WebAuth proxy under e.g. "/webauth/...".
     // The session cookie is path-scoped to "/webauth/", but the EM framework builds
     // its JSMO ajax endpoint from APP_PATH_WEBROOT_FULL which is just the host root.
     // Result: the POST to "/" goes WITHOUT the auth cookie, REDCap returns the home
-    // page HTML, and JSON.parse trips on "<". This rewrites the endpoint to inherit
-    // the same first-segment prefix as the current page when there is a mismatch.
+    // page HTML, and JSON.parse trips on "<".
+    // The proxy prefix is ONLY what precedes REDCap's own first path segment
+    // (redcap_vX.Y.Z, surveys, api, modules, ...). On a standard install nothing
+    // precedes it, so we must NOT rewrite: treating "/redcap_vX.Y.Z/" itself as a
+    // prefix sends data-entry-form ajax to the versioned index.php, which does not
+    // route __passthru and returns the project home HTML (same JSON.parse error).
     function maisRewriteEndpointForPathPrefix(endpoint) {
         try {
             if (!endpoint) return endpoint;
             const ep = new URL(endpoint, location.href);
             // Only rewrite same-origin endpoints
             if (ep.origin !== location.origin) return endpoint;
-            const pagePrefixMatch = location.pathname.match(/^(\/[^\/]+\/)/);
-            if (!pagePrefixMatch) return endpoint;
-            const prefix = pagePrefixMatch[1]; // e.g. "/webauth/"
-            if (prefix === '/') return endpoint;
-            // If the endpoint already starts with the prefix, nothing to do.
-            if (ep.pathname.indexOf(prefix) === 0) return endpoint;
-            // Prepend the prefix (strip its trailing slash so we don't double up).
-            ep.pathname = prefix.replace(/\/$/, '') + ep.pathname;
+            const m = location.pathname.match(/^(.*?)\/(?:redcap_v[\d.]+|surveys|api|modules|external_modules|plugins)(?:\/|$)/);
+            const prefix = m ? m[1] : ''; // e.g. "/webauth"; "" on a standard install
+            if (!prefix) return endpoint;
+            // If the endpoint already carries the prefix, nothing to do.
+            if (ep.pathname.indexOf(prefix + '/') === 0) return endpoint;
+            ep.pathname = prefix + ep.pathname;
             console.log('[MaIS] Rewrote JSMO endpoint for path prefix "' + prefix + '":', ep.toString());
             return ep.toString();
         } catch (e) {
