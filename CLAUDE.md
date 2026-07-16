@@ -21,7 +21,9 @@ This is a live dev copy inside the Stanford REDCap docker-compose stack: the RED
 composer install   # installs google/cloud-secret-manager; vendor/ is gitignored but required at runtime
 ```
 
-There is no build step. PHP and JS are served directly. Requires PHP 8.0+ (uses `match`). The module is enabled/configured per-project via REDCap's External Module manager UI.
+`composer install`/`update` also runs `coenjacobs/mozart` automatically (via `post-install-cmd`/`post-update-cmd`) to vendor-prefix `guzzlehttp/*`, `google/auth` and `firebase/php-jwt` into `MaisLookupVendor\` (output: `vendor_prefixed/`, also gitignored), then `bin/patch-vendor-references.php` repoints `google/gax`'s/`google/cloud-secret-manager`'s own imports at the new namespace, then `composer dump-autoload` regenerates the classmap. This is why the module bundles its own copies of Guzzle/google-auth instead of sharing REDCap core's — see `docs/2026-07-16-guzzle-google-auth-vendor-collision.md` for why that's necessary. Module code imports `MaisLookupVendor\GuzzleHttp\...`, not bare `GuzzleHttp\...` — keep new code consistent with that.
+
+Otherwise there is no build step. PHP and JS are served directly. Requires PHP 8.0+ (uses `match`). The module is enabled/configured per-project via REDCap's External Module manager UI.
 
 ## Architecture
 
@@ -49,3 +51,4 @@ There is no build step. PHP and JS are served directly. Requires PHP 8.0+ (uses 
 - MaIS API responses are XML; single vs. multiple elements produce different structures, hence the wrap-to-array normalization in `getUserData`/`getUserDataAsync`. Keep it when touching parsing.
 - Secrets are named by environment prefix (`UAT_`/`PROD_` + `EHS_CERT`, `EHS_PRIVATE_KEY`, `EHS_PASSPHRASE`) in the Google project given by the `google-project-id` project setting.
 - `config.json` uses framework-version 16. Consult `../REDCAP_TECHNICAL_REFERENCE.md` before changing framework-facing code.
+- **Never add a `use` statement for bare `GuzzleHttp\...`, `Google\Auth\...`, `Firebase\JWT\...` or `Psr\Http\...`.** REDCap core bundles its own (differently-versioned) copies of these same packages; without vendor-prefixing, PHP's autoloader can mix a class from core with a class from the module in the same request and fatal with an "undefined method" error that only reproduces on some projects/requests. Use the `MaisLookupVendor\`-prefixed equivalents (see Commands, and `docs/2026-07-16-guzzle-google-auth-vendor-collision.md`). This applies to `google/gax`/`google/cloud-secret-manager` too if you ever touch their vendored code directly — `bin/patch-vendor-references.php` is what keeps their imports pointed at the prefixed namespace.

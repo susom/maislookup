@@ -1,7 +1,7 @@
 <?php
 namespace Stanford\MaISlookup;
 
-use GuzzleHttp\Exception\GuzzleException;
+use MaisLookupVendor\GuzzleHttp\Exception\GuzzleException;
 
 /** @var \Stanford\MaISlookup\MaISlookup $this */
 

@@ -1,5 +1,52 @@
 {
     "require": {
-        "google/cloud-secret-manager": "^2.1"
+        "google/cloud-secret-manager": "^2.1",
+        "guzzlehttp/guzzle": "7.9.3",
+        "guzzlehttp/promises": "2.2.0",
+        "guzzlehttp/psr7": "2.7.1",
+        "google/auth": "1.47.1",
+        "firebase/php-jwt": "6.11.1",
+        "coenjacobs/mozart": "^0.7"
+    },
+    "extra": {
+        "mozart": {
+            "dep_namespace": "MaisLookupVendor\\",
+            "dep_directory": "/vendor_prefixed/",
+            "classmap_directory": "/vendor_prefixed_classmap/",
+            "classmap_prefix": "MaisLookupVendor_",
+            "packages": [
+                "guzzlehttp/guzzle",
+                "guzzlehttp/promises",
+                "guzzlehttp/psr7",
+                "google/auth",
+                "firebase/php-jwt"
+            ],
+            "excluded_packages": [
+                "psr/log",
+                "psr/cache",
+                "ralouphie/getallheaders"
+            ],
+            "delete_vendor_directories": true
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "MaisLookupVendor\\": "vendor_prefixed/"
+        },
+        "classmap": [
+            "vendor_prefixed_classmap/"
+        ]
+    },
+    "scripts": {
+        "post-install-cmd": [
+            "vendor/bin/mozart compose",
+            "@php bin/patch-vendor-references.php",
+            "composer dump-autoload"
+        ],
+        "post-update-cmd": [
+            "vendor/bin/mozart compose",
+            "@php bin/patch-vendor-references.php",
+            "composer dump-autoload"
+        ]
     }
 }

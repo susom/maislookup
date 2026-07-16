@@ -13,3 +13,9 @@ gitInit.sh
 
 # Composer
 /vendor
+/vendor_prefixed
+# Composer's autoload dump scans this dir (via composer.json's autoload.classmap entry)
+# even before Mozart has run on a fresh checkout, so it needs to exist and be tracked
+# (empty, via .gitkeep) rather than be entirely gitignored.
+/vendor_prefixed_classmap/*
+!/vendor_prefixed_classmap/.gitkeep

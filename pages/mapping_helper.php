@@ -1,8 +1,8 @@
 <?php
 namespace Stanford\MaISlookup;
 
-use GuzzleHttp\Exception\GuzzleException;
-use GuzzleHttp\Promise\Utils;
+use MaisLookupVendor\GuzzleHttp\Exception\GuzzleException;
+use MaisLookupVendor\GuzzleHttp\Promise\Utils;
 
 /** @var \Stanford\MaISlookup\MaISlookup $module */
 

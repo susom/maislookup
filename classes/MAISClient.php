@@ -1,8 +1,8 @@
 <?php
 namespace Stanford\MaISlookup;
 
-use GuzzleHttp\Client;
-use GuzzleHttp\Promise\PromiseInterface;
+use MaisLookupVendor\GuzzleHttp\Client;
+use MaisLookupVendor\GuzzleHttp\Promise\PromiseInterface;
 class MAISClient {
     private $client;
     private $url;

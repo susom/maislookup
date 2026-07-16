@@ -8,8 +8,8 @@ require_once 'classes/CertificateManager.php';
 require_once 'classes/MAISClient.php';
 require_once 'classes/Utilities.php';
 
-use GuzzleHttp\Promise\PromiseInterface;
-use GuzzleHttp\Promise\Utils;
+use MaisLookupVendor\GuzzleHttp\Promise\PromiseInterface;
+use MaisLookupVendor\GuzzleHttp\Promise\Utils;
 
 class MaISlookup extends \ExternalModules\AbstractExternalModule
 {
