@@ -39,6 +39,10 @@
         ]
     },
     "no-auth-pages": [
+        "pages/webauth_ajax"
+    ],
+    "no-csrf-pages": [
+        "pages/webauth_ajax"
     ],
     "project-settings": [
         {

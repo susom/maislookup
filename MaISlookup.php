@@ -7,17 +7,25 @@ require_once 'classes/GoogleSecretManager.php';
 require_once 'classes/CertificateManager.php';
 require_once 'classes/MAISClient.php';
 require_once 'classes/Utilities.php';
+require_once 'classes/WebauthSessionException.php';
 
 use MaisLookupVendor\GuzzleHttp\Promise\PromiseInterface;
 use MaisLookupVendor\GuzzleHttp\Promise\Utils;
 
 class MaISlookup extends \ExternalModules\AbstractExternalModule
 {
+    // Stanford prod serves WebAuth surveys from /webauth/surveys/ (webroot symlink behind OIDC).
+    const WEBAUTH_PATH_PREFIX = '/webauth';
+    const WEBAUTH_TOKEN_TTL = 43200; // 12 hours
+
     private $secretManager;
     private $certManager;
     private $maisClient;
 
     private $record;
+
+    // Set on WebAuth survey pages: ['endpoint' => string, 'token' => string]
+    private $webauthContext = null;
 
     public function __construct()
     {
@@ -89,7 +97,155 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
     {
         if ($this->getProjectSetting('sunetid-field') !== '') {
             $this->record = $record;
+            if ($this->isWebauthSurveyPage()) {
+                // JSMO ajax is unusable here: the framework only treats URLs starting with
+                // APP_PATH_SURVEY ("/surveys/") as surveys, so on /webauth/surveys/ it builds an
+                // authenticated, non-survey endpoint that a respondent can never satisfy.
+                try {
+                    $this->webauthContext = [
+                        'endpoint' => $this->getWebauthEndpoint(),
+                        'token'    => $this->issueWebauthToken([
+                            'pid'  => (int)$project_id,
+                            's'    => (string)$survey_hash,
+                            'rec'  => (string)$record,
+                            'ins'  => (string)$instrument,
+                            'evt'  => (int)$event_id,
+                            'inst' => (int)$repeat_instance,
+                            'u'    => (string)$_SERVER['REMOTE_USER'],
+                        ]),
+                    ];
+                } catch (\Throwable $t) {
+                    // Never break the survey page; the lookup falls back to JSMO ajax.
+                    \REDCap::logEvent('MaIS WebAuth lookup setup failed', $t->getMessage());
+                }
+            }
             $this->includeFile('pages/mais_lookup.php');
+        }
+    }
+
+    public function getWebauthContext(): ?array
+    {
+        return $this->webauthContext;
+    }
+
+    /**
+     * True when the current request is a survey served under the WebAuth path prefix
+     * with an authenticated user (REMOTE_USER is set by Apache OIDC on prod).
+     */
+    private function isWebauthSurveyPage(): bool
+    {
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
+        return strpos($uri, self::WEBAUTH_PATH_PREFIX . APP_PATH_SURVEY) === 0
+            && !empty($_SERVER['REMOTE_USER']);
+    }
+
+    /**
+     * Module API URL for pages/webauth_ajax, moved under the WebAuth prefix so Apache
+     * requires OIDC for every lookup/save request. Host-relative on purpose: prod answers on
+     * several hostnames (ServerAlias), and the request must stay same-origin with the page
+     * so the OIDC session cookie is sent.
+     */
+    private function getWebauthEndpoint(): string
+    {
+        $parts = parse_url($this->getUrl('pages/webauth_ajax.php', true, true));
+        return self::WEBAUTH_PATH_PREFIX . $parts['path'] . '?' . $parts['query'];
+    }
+
+    private function getWebauthTokenKey(): string
+    {
+        $salt = $GLOBALS['salt'] ?? '';
+        if ($salt === '') {
+            throw new \Exception('Cannot sign WebAuth lookup token: REDCap salt is not available.');
+        }
+        return hash('sha256', 'MaISlookup-webauth-token|' . $salt, true);
+    }
+
+    private static function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    private static function base64UrlDecode(string $data): string
+    {
+        return (string)base64_decode(strtr($data, '-_', '+/'));
+    }
+
+    private function issueWebauthToken(array $claims): string
+    {
+        $claims['exp'] = time() + self::WEBAUTH_TOKEN_TTL;
+        $body = self::base64UrlEncode(json_encode($claims));
+        $sig = self::base64UrlEncode(hash_hmac('sha256', $body, $this->getWebauthTokenKey(), true));
+        return $body . '.' . $sig;
+    }
+
+    /**
+     * @return array verified claims
+     * @throws \Exception when the token is malformed, forged, expired or for another project/user
+     */
+    private function verifyWebauthToken(string $token, string $remoteUser): array
+    {
+        $parts = explode('.', $token);
+        if (count($parts) !== 2) {
+            throw new \Exception('Invalid lookup token.');
+        }
+        [$body, $sig] = $parts;
+        $expected = self::base64UrlEncode(hash_hmac('sha256', $body, $this->getWebauthTokenKey(), true));
+        if (!hash_equals($expected, $sig)) {
+            throw new \Exception('Invalid lookup token.');
+        }
+        $claims = json_decode(self::base64UrlDecode($body), true);
+        if (!is_array($claims)) {
+            throw new \Exception('Invalid lookup token.');
+        }
+        if (($claims['exp'] ?? 0) < time()) {
+            throw new WebauthSessionException('Lookup token expired.');
+        }
+        if ((int)($claims['pid'] ?? 0) !== (int)$this->getProjectId()) {
+            throw new \Exception('Lookup token does not match this project.');
+        }
+        if (($claims['u'] ?? '') !== $remoteUser) {
+            throw new WebauthSessionException('Lookup token does not match the logged-in user.');
+        }
+        return $claims;
+    }
+
+    /**
+     * Handles POSTs to pages/webauth_ajax (WebAuth surveys only). Same actions and response
+     * shape as redcap_module_ajax, so the JS treats both transports identically.
+     */
+    public function handleWebauthAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        try {
+            if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+                http_response_code(405);
+                throw new \Exception('Method not allowed.');
+            }
+            $remoteUser = $_SERVER['REMOTE_USER'] ?? '';
+            if ($remoteUser === '') {
+                throw new WebauthSessionException('Not logged in.');
+            }
+            $request = json_decode((string)file_get_contents('php://input'), true);
+            if (!is_array($request)) {
+                http_response_code(400);
+                throw new \Exception('Invalid request.');
+            }
+            $claims = $this->verifyWebauthToken((string)($request['token'] ?? ''), $remoteUser);
+            $payload = is_array($request['payload'] ?? null) ? $request['payload'] : [];
+            $action = (string)($request['action'] ?? '');
+            $result = match ($action) {
+                'lookupUser' => $this->lookupUser($payload),
+                'saveUser'   => $this->saveUser($payload, $claims['rec']),
+                default      => throw new \Exception("Action $action is not defined"),
+            };
+            echo json_encode($result);
+        } catch (WebauthSessionException $e) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'sessionExpired' => true, 'message' => $e->getMessage()]);
+        } catch (\Exception $e) {
+            \REDCap::logEvent($e);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }
     }
 
@@ -120,7 +276,8 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
         try {
             return match ($action) {
                 'lookupUser' => $this->lookupUser($payload),
-                'saveUser'   => $this->saveUser($payload),
+                // Save into the framework-verified record, never a client-supplied id.
+                'saveUser'   => $this->saveUser($payload, (string)$record),
                 default      => throw new \Exception("Action $action is not defined"),
             };
         } catch (\Exception $e) {
@@ -150,12 +307,13 @@ class MaISlookup extends \ExternalModules\AbstractExternalModule
     /**
      * Map MAIS API data to mapped fields, save private ones, return public ones.
      * Performs concurrent fetches for data sections, then merges.
+     * @param string $record verified record id (JSMO verification or signed WebAuth token)
      * @throws \Exception
      */
-    public function saveUser($payload)
+    public function saveUser($payload, string $record)
     {
         try {
-            $dataToSave[\REDCap::getRecordIdField()] = $payload['record_id'];
+            $dataToSave[$this->getRecordIdField()] = $record;
             $dataToReturn = [];
             $mappedAttributes = $this->getSubSettings('attribute_instance');
             $sunetId = $payload['sunetId'];

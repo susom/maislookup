@@ -44,6 +44,8 @@ Otherwise there is no build step. PHP and JS are served directly. Requires PHP 8
 
 ## Gotchas (hard-won — see git history)
 
+- **WebAuth surveys (`/webauth/surveys/…`) cannot use JSMO `module.ajax()`.** The framework's `isSurveyPage()` only matches URLs starting with `/surveys/`, so there it builds an authenticated non-survey endpoint and every call returns HTML. MaIS therefore uses its own transport on those pages: `pages/webauth_ajax` under `/webauth/api/` (OIDC-protected) plus an HMAC token issued in `redcap_survey_page`. `saveUser` must only ever use a verified record (framework `$record` or token claim), never a client-supplied id. See `docs/2026-10-07-webauth-survey-lookup-fix.md`.
+
 - **iOS Safari is the fragile platform.** Most recent commits are iOS lookup fixes. The code contains deliberate workarounds — do not "clean them up":
   - `jsmo.js`: SUNet IDs are lowercased/trimmed because iOS auto-capitalizes and the MaIS API is case-sensitive; the modal is vanilla CSS (no transforms/animations); lookup triggers on both `blur` and `change` with a debounce; network spies + a "pristine XHR from iframe" replay exist to surface diagnostics on devices with no console; `maisRewriteEndpointForPathPrefix()` fixes the JSMO endpoint when REDCap sits behind Stanford's WebAuth path prefix (`/webauth/...`).
   - `MaISlookup.php` `injectJSMO()`: bootstraps a REDCap CSRF token into `$_SESSION` (missing on some public-survey requests, which otherwise breaks the framework's ajax settings), probes `getAjaxSettings()` for diagnostics, and cache-busts `jsmo.js` with the file mtime because iOS caches it aggressively.

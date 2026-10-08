@@ -121,7 +121,8 @@ $this->injectJSMO();
         var jsmoObject = ExternalModules.Stanford.MaISlookup;
         jsmoObject.sunetId = "<?php echo $this->getProjectSetting('sunetid-field') ?>";
         jsmoObject.mappedAttributes = <?php echo json_encode($this->getMappedAttributes()) ?>;
-        jsmoObject.record_id = "<?php echo $this->record ?>";
+        // Only set on /webauth/ surveys: lookups go to pages/webauth_ajax instead of JSMO ajax.
+        jsmoObject.webauth = <?php echo json_encode($this->getWebauthContext()) ?>;
         jsmoObject.init();
     });
 </script>

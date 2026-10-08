@@ -253,6 +253,60 @@
         const loader = document.getElementById('ajax-loader');
         if (loader) loader.style.display = show ? 'block' : 'none';
     }
+    function maisShowSessionExpired() {
+        maisSetBody(
+            '<div class="alert alert-warning">' +
+                '<div class="fw-bold mb-2">Your Stanford login has expired.</div>' +
+                '<div class="mb-3">Reload the page to log in again, then re-enter the SUNet ID. ' +
+                'Answers on this page that you have not submitted yet may be lost.</div>' +
+                '<button type="button" class="btn btn-primary" data-mais-reload="1">Reload page</button>' +
+            '</div>'
+        );
+        maisOpenModal('MaIS Lookup');
+    }
+
+    // ---- Transport ----
+    // On WebAuth surveys (/webauth/surveys/) the framework builds a JSMO endpoint a survey
+    // respondent can never use (it only recognizes URLs starting with /surveys/ as surveys).
+    // There PHP injects module.webauth = {endpoint, token} and we POST to the module's own
+    // page under /webauth/, which Apache protects with OIDC. Everywhere else: module.ajax().
+    function maisSessionExpiredError(message) {
+        const err = new Error(message || 'Your Stanford login has expired.');
+        err.maisSessionExpired = true;
+        return err;
+    }
+    function maisRequest(action, payload) {
+        const wa = module.webauth;
+        if (!wa || !wa.endpoint) return module.ajax(action, payload);
+        return fetch(wa.endpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            // An expired OIDC session answers with a redirect to the IdP; don't follow it.
+            redirect: 'manual',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                // Lets mod_auth_openidc answer 401 instead of redirecting a background request.
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ action: action, payload: payload, token: wa.token })
+        }).then(function (resp) {
+            if (resp.type === 'opaqueredirect' || resp.status === 401) {
+                return resp.text().then(function (txt) {
+                    let msg = '';
+                    try { msg = JSON.parse(txt).message || ''; } catch (_) {}
+                    throw maisSessionExpiredError(msg);
+                }, function () { throw maisSessionExpiredError(); });
+            }
+            return resp.text().then(function (txt) {
+                try {
+                    return JSON.parse(txt);
+                } catch (_) {
+                    throw new Error('Unexpected response from server (HTTP ' + resp.status + '): ' + String(txt).slice(0, 300));
+                }
+            });
+        });
+    }
 
     // Wire close handlers exactly once on first init.
     let maisInitialized = false;
@@ -265,6 +319,9 @@
             const t = e.target;
             if (t && t.getAttribute && t.getAttribute('data-mais-close') === '1') {
                 maisCloseModal();
+            }
+            if (t && t.getAttribute && t.getAttribute('data-mais-reload') === '1') {
+                location.reload();
             }
         });
 
@@ -291,7 +348,7 @@
         sunetId: '',
         mappedAttributes: {},
         su_value: '',
-        record_id: '',
+        webauth: null,
         init: function (callback, errorCallback) {
             console.log('[MaIS] init() called. sunetId field:', module.sunetId);
             maisWireOnce();
@@ -332,10 +389,10 @@
         saveUser: function (index, callback, errorCallback) {
             console.log('[MaIS] saveUser index:', index, 'sunet:', this.su_value);
             maisShowLoader(true);
-            module.ajax('saveUser', {
+            // The record is taken server-side from the verified context, never from the client.
+            maisRequest('saveUser', {
                 'sunetId': this.su_value,
-                'index': index,
-                'record_id': this.record_id
+                'index': index
             })
                 .then(function (response) {
                     maisShowLoader(false);
@@ -356,6 +413,7 @@
                 .catch(function (err) {
                     maisShowLoader(false);
                     console.error('[MaIS] saveUser error:', err);
+                    if (err && err.maisSessionExpired) maisShowSessionExpired();
                     if (typeof errorCallback === 'function') errorCallback(err);
                 });
         },
@@ -372,7 +430,7 @@
             console.log('[MaIS] lookupUser ->', this.su_value);
             maisShowLoader(true);
 
-            module.ajax('lookupUser', { 'sunetId': this.su_value })
+            maisRequest('lookupUser', { 'sunetId': this.su_value })
                 .then(function (response) {
                     maisShowLoader(false);
                     console.log('[MaIS] lookupUser response:', response);
@@ -432,6 +490,12 @@
                 .catch(function (err) {
                     maisShowLoader(false);
                     console.error('[MaIS] lookupUser error:', err);
+
+                    if (err && err.maisSessionExpired) {
+                        maisShowSessionExpired();
+                        if (typeof errorCallback === 'function') errorCallback(err);
+                        return;
+                    }
 
                     // Detect the very common "HTML returned instead of JSON" case
                     // (server redirected to a login/WebAuth page -> response starts with '<').
